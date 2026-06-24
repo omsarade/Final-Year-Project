@@ -11,7 +11,7 @@ export default function Navbar({ user }) {
   };
 
   return (
-    <div className="glass-panel rounded-2xl mx-4 mt-4 lg:mx-6 lg:mt-5 px-6 py-4 flex items-center justify-between z-40 sticky top-4">
+    <div className="glass-panel rounded-2xl mx-4 mt-4 lg:mx-6 lg:mt-5 px-6 py-4 flex items-center justify-between z-40 lg:sticky lg:top-4">
       {/* Left: Clock + Greeting */}
       <div className="flex-1">
         <LiveClock name={user.name} />
