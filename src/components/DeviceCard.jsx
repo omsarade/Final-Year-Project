@@ -113,9 +113,9 @@ export default function DeviceCard({ id, label, isOn, schedule, onToggle, onRena
       ref={cardRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`glass-card rounded-2xl p-5 cursor-pointer select-none relative group ${isOn ? cfg.onClass : ''}`}
+      className={`glass-card rounded-2xl p-5 select-none relative group ${isOn ? cfg.onClass : ''} ${isScheduling ? '' : 'cursor-pointer'}`}
       style={{ willChange: 'transform' }}
-      onClick={handleToggle}
+      onClick={isScheduling ? undefined : handleToggle}
     >
       {/* Top row: icon + action buttons */}
       <div className="flex items-start justify-between mb-4">
@@ -134,7 +134,17 @@ export default function DeviceCard({ id, label, isOn, schedule, onToggle, onRena
           <button
             className="text-slate-600 hover:text-slate-300 p-1 rounded"
             title="Schedule"
-            onClick={e => { e.stopPropagation(); setIsScheduling(s => !s); setIsEditing(false); }}
+            onClick={e => { 
+              e.stopPropagation(); 
+              if (!isScheduling) {
+                const now = new Date();
+                const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                setScheduleOn(nowStr);
+                setScheduleOff(nowStr);
+              }
+              setIsScheduling(s => !s); 
+              setIsEditing(false); 
+            }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -184,7 +194,10 @@ export default function DeviceCard({ id, label, isOn, schedule, onToggle, onRena
 
       {/* Schedule panel */}
       {isScheduling && (
-        <div className="mb-4 bg-black/20 rounded-xl p-3 border border-white/[0.06]" onClick={e => e.stopPropagation()}>
+        <div
+          className="mt-3 mb-1 bg-black/20 rounded-xl p-3 border border-white/[0.06]"
+          onClick={e => e.stopPropagation()}
+        >
           <div className="flex gap-3 mb-3">
             {[['Turn ON', scheduleOn, setScheduleOn], ['Turn OFF', scheduleOff, setScheduleOff]].map(([lbl, val, setter]) => (
               <div key={lbl} className="flex-1">

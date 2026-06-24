@@ -89,4 +89,46 @@
   .liquid-glass        { @apply glass-card; }
   .liquid-glass-heavy  { @apply glass-panel; }
   .liquid-input        { @apply glass-input; }
+
+  /* ── Mic pulse rings (listening state) ── */
+  .animate-mic-ring {
+    animation: mic-ring 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  .animate-mic-ring-delay {
+    animation: mic-ring 1.4s cubic-bezier(0, 0, 0.2, 1) 0.5s infinite;
+  }
+
+  /* ── Floating slow/fast for background orbs ── */
+  .animate-float-slow {
+    animation: float-slow 12s ease-in-out infinite alternate;
+  }
+  .animate-float-fast {
+    animation: float-fast 8s ease-in-out infinite alternate;
+  }
+
+  /* ── Fade-in ── */
+  .animate-fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+}
+
+/* ── Global keyframes ────────────────────────────────────────────────────── */
+@keyframes mic-ring {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  100% { transform: scale(1.9);  opacity: 0; }
+}
+
+@keyframes float-slow {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(40px, 30px) scale(1.08); }
+}
+
+@keyframes float-fast {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-30px, -40px) scale(1.05); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

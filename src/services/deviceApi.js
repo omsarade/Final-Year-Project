@@ -58,6 +58,26 @@ export async function getNodeMCUStatus() {
   }
 }
 
+/**
+ * Fetches the live states of all devices from Firebase.
+ * This allows the UI to update automatically when the NodeMCU's schedule triggers.
+ */
+export async function getFirebaseDeviceStates() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch(`${FIREBASE_URL}${FIREBASE_PATH}.json`, {
+      method: 'GET',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
+}
+
 // ─── Firebase REST API ───────────────────────────────────────────────────────
 /**
  * Updates device state in Firebase Realtime Database via REST PATCH.
@@ -80,6 +100,27 @@ export async function sendCommandToFirebase(deviceId, state) {
     return { success: true, device: deviceId, state: value };
   } catch (error) {
     console.error(`[Firebase] Failed to update ${deviceId}:`, error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Pushes the on/off schedule to Firebase so the NodeMCU knows when to trigger independently.
+ * payload: { on: "15:00", off: "16:00" } or null to clear.
+ */
+export async function sendScheduleToFirebase(deviceId, schedule) {
+  const url = `${FIREBASE_URL}${FIREBASE_PATH}/${deviceId}/schedule.json`;
+  try {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(schedule || null), // pass null to delete schedule
+    });
+    const data = await response.json();
+    console.log(`[Firebase] Schedule updated for ${deviceId}:`, data);
+    return { success: true };
+  } catch (error) {
+    console.error(`[Firebase] Failed to update schedule for ${deviceId}:`, error);
     return { success: false, error };
   }
 }

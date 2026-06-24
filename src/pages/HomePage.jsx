@@ -4,7 +4,8 @@ import { gsap } from 'gsap';
 import DeviceCard from '../components/DeviceCard';
 import MasterSwitch from '../components/MasterSwitch';
 import PowerStats from '../components/PowerStats';
-import { controlDevice, getNodeMCUStatus } from '../services/deviceApi';
+import ScenesPanel from '../components/ScenesPanel';
+import { controlDevice, getNodeMCUStatus, sendScheduleToFirebase, getFirebaseDeviceStates } from '../services/deviceApi';
 
 const DEFAULT_DEVICES = [
   { id: 'light1', label: 'Light 1' },
@@ -50,22 +51,42 @@ export default function HomePage() {
   
   const lastHeartbeat = useRef(-1);
   const missedBeats = useRef(0);
+  const lastManualToggle = useRef(0); // Used to prevent UI flicker when fetching right after a user click
 
-  // Poll NodeMCU physical connection status via Cloud Heartbeat
+  // Poll NodeMCU physical connection status via Cloud Heartbeat AND sync live states
   useEffect(() => {
     const checkConnection = async () => {
+      // 1. Sync Heartbeat
       const currentUptime = await getNodeMCUStatus();
-      
-      // If we got a valid number and it changed since last check, NodeMCU is alive!
       if (currentUptime !== null && currentUptime !== lastHeartbeat.current) {
         lastHeartbeat.current = currentUptime;
         missedBeats.current = 0;
         setIsNodeMCUConnected(true);
       } else {
-        // Did not update... count a missed beat
         missedBeats.current += 1;
         if (missedBeats.current >= 2) {
           setIsNodeMCUConnected(false); // 9 seconds passed with no update
+        }
+      }
+
+      // 2. Sync Live States from Firebase
+      // Only sync if the user hasn't manually clicked a button in the last 2 seconds
+      // to avoid optimistic UI reverting before Firebase saves.
+      if (Date.now() - lastManualToggle.current > 2000) {
+        const liveStates = await getFirebaseDeviceStates();
+        if (liveStates) {
+          setDeviceStates(prev => {
+            let next = { ...prev };
+            let updated = false;
+            Object.keys(liveStates).forEach(deviceId => {
+              const isOn = liveStates[deviceId].state === "ON";
+              if (next[deviceId] !== isOn) {
+                next[deviceId] = isOn;
+                updated = true;
+              }
+            });
+            return updated ? next : prev;
+          });
         }
       }
     };
@@ -98,9 +119,14 @@ export default function HomePage() {
 
   // Handler: toggle a single device
   const handleToggle = async (deviceId) => {
-    const newState = !deviceStates[deviceId];
-    setDeviceStates(prev => ({ ...prev, [deviceId]: newState }));
-    await controlDevice(deviceId, newState);
+    lastManualToggle.current = Date.now(); // Prevent UI flicker
+    
+    // Optimistic UI update
+    setDeviceStates(prev => ({ ...prev, [deviceId]: !prev[deviceId] }));
+    const isOn = !deviceStates[deviceId];
+    
+    // Call the unified dispatcher
+    await controlDevice(deviceId, isOn);
   };
 
   // Handler: rename a device
@@ -111,10 +137,13 @@ export default function HomePage() {
   };
 
   // Handler: update device schedule
-  const handleScheduleChange = (deviceId, schedule) => {
+  const handleScheduleChange = async (deviceId, schedule) => {
+    // 1. Update UI locally
     setDevices(prev => 
       prev.map(d => d.id === deviceId ? { ...d, schedule } : d)
     );
+    // 2. Push to NodeMCU via Firebase for autonomous 24/7 offline running
+    await sendScheduleToFirebase(deviceId, schedule);
   };
 
   // Handler: remove a device
@@ -142,38 +171,56 @@ export default function HomePage() {
     setIsAdding(false);
   };
 
-  // Automation: Effect to check schedule every 10 seconds
-  useEffect(() => {
-    const checkSchedule = () => {
-      const now = new Date();
-      // Format current time as HH:MM
-      const currentTime = now.getHours().toString().padStart(2, '0') + ':' + 
-                          now.getMinutes().toString().padStart(2, '0');
-
-      devices.forEach(device => {
-        if (!device.schedule) return;
-        
-        const { on, off } = device.schedule;
-        const isOn = deviceStates[device.id];
-
-        if (on === currentTime && !isOn) {
-          handleToggle(device.id); // Turn ON
-        } else if (off === currentTime && isOn) {
-          handleToggle(device.id); // Turn OFF
-        }
-      });
-    };
-
-    const intervalId = setInterval(checkSchedule, 10000); // Check every 10 seconds
-    return () => clearInterval(intervalId);
-  }, [devices, deviceStates]); // Depend on devices and states so handleToggle runs correctly
+  // (Local browser timer loop removed: NodeMCU now handles scheduling autonomously via Firebase)
 
   // Handler: master switch – turn everything off
   const handleMasterOff = async () => {
+    lastManualToggle.current = Date.now();
     const allOff = devices.reduce((acc, d) => ({ ...acc, [d.id]: false }), {});
     setDeviceStates(allOff);
     await Promise.all(devices.map(d => controlDevice(d.id, false)));
   };
+
+  // Handler: master switch – turn everything on
+  const handleMasterOn = async () => {
+    lastManualToggle.current = Date.now();
+    const allOn = devices.reduce((acc, d) => ({ ...acc, [d.id]: true }), {});
+    setDeviceStates(allOn);
+    await Promise.all(devices.map(d => controlDevice(d.id, true)));
+  };
+
+  // Handler: apply a full scene (map of deviceId → boolean)
+  const handleApplyScene = async (sceneStates) => {
+    lastManualToggle.current = Date.now();
+    // Build next state by merging scene states over existing ones
+    setDeviceStates(prev => ({ ...prev, ...sceneStates }));
+    // Fire all device commands in parallel
+    await Promise.all(
+      Object.entries(sceneStates).map(([id, on]) => controlDevice(id, on))
+    );
+  };
+
+  // Register global voice command handler so Navbar's mic can reach us
+  useEffect(() => {
+    window.__smarthomeVoiceHandler = (command) => {
+      if (command.type === 'device') {
+        lastManualToggle.current = Date.now();
+        setDeviceStates(prev => ({ ...prev, [command.deviceId]: command.state }));
+        controlDevice(command.deviceId, command.state);
+      } else if (command.type === 'master_off') {
+        handleMasterOff();
+      } else if (command.type === 'master_on') {
+        handleMasterOn();
+      } else if (command.type === 'scene') {
+        // Dynamically import SCENES to avoid circular deps
+        import('../components/ScenesPanel').then(mod => {
+          const scene = mod.SCENES.find(s => s.id === command.sceneId);
+          if (scene) handleApplyScene(scene.states);
+        });
+      }
+    };
+    return () => { delete window.__smarthomeVoiceHandler; };
+  }, [devices, deviceStates]);
 
   const handleLogout = () => {
     localStorage.removeItem('smartHomeUser');
@@ -210,12 +257,30 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Main two-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start flex-1">
+      {/* Smart Scenes */}
+      <ScenesPanel deviceStates={deviceStates} onApplyScene={handleApplyScene} />
 
-        {/* ── LEFT: 2x2 Devices Grid ── */}
-        <div className="grid grid-cols-2 gap-4">
-          {devices.map(device => (
+      {/* Main two-column layout with Flex order switching */}
+      <div className="flex flex-col lg:flex-row gap-5 items-start flex-1">
+
+        {/* ── POWER & MASTER CONTROL (Top on mobile, Right on desktop) ── */}
+        <div className="order-1 lg:order-2 flex flex-col gap-4 w-full lg:w-[300px] flex-shrink-0">
+          <PowerStats deviceStates={deviceStates} devices={devices} />
+
+          <div ref={footerRef} className="glass-panel rounded-2xl p-5">
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-slate-600 text-[10px] uppercase tracking-widest font-semibold">Master Control</p>
+            </div>
+            <MasterSwitch anyDeviceOn={anyDeviceOn} onMasterOff={handleMasterOff} />
+          </div>
+        </div>
+
+        {/* ── LEFT: 2x2 Devices (Bottom on mobile, Left on desktop) ── */}
+        <div className="order-2 lg:order-1 grid grid-cols-2 gap-4 w-full flex-1 h-fit">
+          {devices
+            .slice()
+            .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+            .map(device => (
             <DeviceCard
               key={device.id}
               id={device.id}
@@ -229,7 +294,7 @@ export default function HomePage() {
             />
           ))}
 
-          {/* Add Component */}
+          {/* Add Switch button */}
           {isAdding ? (
             <div
               className="glass-card rounded-2xl p-5 flex flex-col items-center justify-center border border-white/[0.07]"
@@ -247,15 +312,8 @@ export default function HomePage() {
                   onKeyDown={e => { if (e.key === 'Escape') { setIsAdding(false); setNewSwitchName(''); } }}
                 />
                 <div className="flex gap-2 mt-1">
-                  <button type="submit"
-                    className="flex-1 bg-white/10 hover:bg-white/15 text-white text-xs py-2 rounded-lg font-semibold transition-all">
-                    Add
-                  </button>
-                  <button type="button"
-                    onClick={() => { setIsAdding(false); setNewSwitchName(''); }}
-                    className="flex-1 border border-white/[0.08] text-slate-500 hover:text-slate-300 text-xs py-2 rounded-lg transition-all">
-                    Cancel
-                  </button>
+                  <button type="submit" className="flex-1 bg-white/10 hover:bg-white/15 text-white text-xs py-2 rounded-lg font-semibold transition-all">Add</button>
+                  <button type="button" onClick={() => { setIsAdding(false); setNewSwitchName(''); }} className="flex-1 border border-white/[0.08] text-slate-500 hover:text-slate-300 text-xs py-2 rounded-lg transition-all">Cancel</button>
                 </div>
               </form>
             </div>
@@ -269,21 +327,9 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
               </div>
-              <span className="text-slate-600 text-[10px] uppercase tracking-widest font-semibold group-hover:text-slate-400 transition-colors">
-                Add Switch
-              </span>
+              <span className="text-slate-600 text-[10px] uppercase tracking-widest font-semibold group-hover:text-slate-400 transition-colors">Add Switch</span>
             </div>
           )}
-        </div>
-
-        {/* ── RIGHT: Power + Master Control ── */}
-        <div className="flex flex-col gap-4">
-          <PowerStats deviceStates={deviceStates} devices={devices} />
-
-          <div ref={footerRef} className="glass-panel rounded-2xl p-5">
-            <p className="text-slate-600 text-[10px] uppercase tracking-widest font-semibold mb-4">Master Control</p>
-            <MasterSwitch anyDeviceOn={anyDeviceOn} onMasterOff={handleMasterOff} />
-          </div>
         </div>
 
       </div>

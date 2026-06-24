@@ -1,4 +1,5 @@
 import LiveClock from './LiveClock';
+import VoiceMicButton from './VoiceMicButton';
 import { useNavigate } from 'react-router-dom';
 
 export default function Navbar({ user }) {
@@ -16,8 +17,13 @@ export default function Navbar({ user }) {
         <LiveClock name={user.name} />
       </div>
 
-      {/* Right: Sign Out — standalone professional button */}
-      <div className="pl-6 flex-shrink-0">
+      {/* Centre: Voice Mic Button */}
+      <div className="flex items-center justify-center px-4">
+        <VoiceMicButton />
+      </div>
+
+      {/* Right: Sign Out */}
+      <div className="flex-shrink-0">
         <button
           onClick={handleLogout}
           className="
