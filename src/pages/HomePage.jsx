@@ -11,7 +11,7 @@ const DEFAULT_DEVICES = [
   { id: 'light1', label: 'Light 1' },
   { id: 'light2', label: 'Light 2' },
   { id: 'fan',    label: 'Fan' },
-  { id: 'ac',     label: 'AC' },
+  { id: 'tv',     label: 'TV' },
 ];
 
 const INITIAL_STATES = DEFAULT_DEVICES.reduce((acc, d) => ({ ...acc, [d.id]: false }), {});
@@ -33,7 +33,17 @@ export default function HomePage() {
   const [deviceStates, setDeviceStates] = useState(INITIAL_STATES);
   const [devices, setDevices] = useState(() => {
     const saved = localStorage.getItem('smartHomeDevices');
-    return saved ? JSON.parse(saved) : DEFAULT_DEVICES;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.map(d => {
+        if (d.id === 'light1') return { ...d, label: 'Light 1' };
+        if (d.id === 'light2') return { ...d, label: 'Light 2' };
+        if (d.id === 'fan') return { ...d, label: 'Fan' };
+        if (d.id === 'ac' || d.id === 'tv') return { ...d, id: 'tv', label: 'TV' };
+        return d;
+      });
+    }
+    return DEFAULT_DEVICES;
   });
 
   useEffect(() => {
@@ -278,8 +288,6 @@ export default function HomePage() {
         {/* ── LEFT: 2x2 Devices (Bottom on mobile, Left on desktop) ── */}
         <div className="order-2 lg:order-1 grid grid-cols-2 gap-4 w-full flex-1 h-fit">
           {devices
-            .slice()
-            .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
             .map(device => (
             <DeviceCard
               key={device.id}

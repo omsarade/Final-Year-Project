@@ -18,10 +18,10 @@ const DEVICE_KEYWORDS = {
   'light2':    'light2',
   'second light': 'light2',
   'fan':       'fan',
-  'ac':        'ac',
-  'air conditioner': 'ac',
-  'air con':   'ac',
-  'cooler':    'ac',
+  'tv':        'tv',
+  'television': 'tv',
+  'the tv':    'tv',
+  'telly':     'tv',
 };
 
 // ── Scene keyword map ────────────────────────────────────────────────────────

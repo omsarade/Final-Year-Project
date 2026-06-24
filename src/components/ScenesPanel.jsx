@@ -19,7 +19,7 @@ export const SCENES = [
     borderActive: 'rgba(251,191,36,0.4)',
     textColor: 'text-amber-300',
     dotColor: 'bg-amber-400',
-    states: { light1: true, light2: true, fan: false, ac: false },
+    states: { light1: true, light2: true, fan: false, tv: false },
   },
   {
     id: 'movie_night',
@@ -31,7 +31,7 @@ export const SCENES = [
     borderActive: 'rgba(167,139,250,0.4)',
     textColor: 'text-violet-300',
     dotColor: 'bg-violet-400',
-    states: { light1: false, light2: true, fan: true, ac: false },
+    states: { light1: false, light2: true, fan: true, tv: false },
   },
   {
     id: 'sleep_mode',
@@ -43,7 +43,7 @@ export const SCENES = [
     borderActive: 'rgba(99,102,241,0.4)',
     textColor: 'text-indigo-300',
     dotColor: 'bg-indigo-400',
-    states: { light1: false, light2: false, fan: false, ac: false },
+    states: { light1: false, light2: false, fan: false, tv: false },
   },
   {
     id: 'away',
@@ -55,7 +55,7 @@ export const SCENES = [
     borderActive: 'rgba(100,116,139,0.4)',
     textColor: 'text-slate-300',
     dotColor: 'bg-slate-400',
-    states: { light1: false, light2: false, fan: false, ac: false },
+    states: { light1: false, light2: false, fan: false, tv: false },
   },
 ];
 
@@ -64,7 +64,7 @@ const DEVICE_LABELS = {
   light1: 'L1',
   light2: 'L2',
   fan: 'Fan',
-  ac: 'AC',
+  tv: 'TV',
 };
 
 // ── Helper: does current state match a scene? ────────────────────────────────
